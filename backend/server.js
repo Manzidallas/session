@@ -1,54 +1,66 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const session = require('express-session');
-const MongoUrI = 'mongodb://127.0.0.1/Authentication';
-const mongoconnectsession = require('connect-mongodb-session')(session);
-const port = 4000;
-const app = express();
+const express = require('express')
+const mongoose = require('mongoose')
+const cors = require('cors')
+const bcrypt = require('bcrypt')
+const port = 5000
+const app = express()
+const user = require('./models/User')
+
 
 app.use(express.json())
 app.use(cors({origin: "*"}))
-app.set('view engine', 'ejs')
-app.use(express.static('public'))
-app.use(express.urlencoded({extended: true}))
 
-mongoose.connect(MongoUrI)
+mongoose.connect('mongodb://127.0.0.1/SessionTest')
 .then(()=>{
-    console.log('MongoDb is connected succesfully')
+    console.log('Connected To MongoDB succesfully')
 })
 .catch((error)=>{
-    console.log('Failed to connect to mongodb', error)
+    console.log('Failed to connect to MongoDB', error)
 })
 
-const store = new mongoconnectsession({
-    uri: MongoUrI,
-    collection: "MongoSession"
+app.post('/register', async (req ,res)=>{
+
+    const {username, email, password } = req.body
+
+    try {
+        const hashedpassword = await bcrypt.hash(password, 12)
+        const newUser = await user(
+            {
+                username: username,
+                email: email,
+                password: hashedpassword 
+            },
+        )
+        newUser.save();
+
+        if(newUser){
+            res.status(201).json({message: "User registered succesffully", user : newUser})
+        }else{
+            res.json({message: "User failed to register", user : newUser})
+        }
+    } catch (error) {
+        res.status(500).json({message: "Internal Server Err", user : newUser})
+    }
 })
 
-app.use(
-    session({
-        secret: "key to sign to your cookie",
-        resave: false,
-        saveUninitialized: false,
-        store: store
-    })
-)
+app.post('/login', async (req, res)=>{
+    const {email , password} = req.body
 
+    const findUser = await user.findOne({email})
+    if(!findUser){
+        return res.status(404).json({message : 'User was not found'})
+    }
 
+    // res.status(200).json({message : 'User was found + true'})
+    const comparepassword = await bcrypt.compare(password, (findUser.password))
+    if(comparepassword){
+        res.status(200).json({message: "Password Matches", password: comparepassword})
+    }else{
+        res.json({message: "Passwords Don't Match", password: comparepassword});
+    }
 
-
-
-app.get('/dashboard', (req, res)=>{
-    res.render('index')
-    req.session.isAuth = true
 })
-
-
-
-
-
 
 app.listen(port, ()=>{
-    console.log(`The server is running on port : ${port}`)
+    console.log(`The server is running on port ${port}`) 
 })
